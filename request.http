@@ -1,0 +1,43 @@
+@host = http://localhost:3000
+
+###
+GET {{host}}/students
+
+
+###
+POST {{host}}/students
+Content-Type: application/json
+
+{
+    "name": "Habib",
+    "roll": 45,
+    "is_male": true,
+    "results": 
+    {
+        "math": 56,
+        "english": 78,
+        "physics": 60,
+        "chemistry": 89
+    }
+}
+
+
+###
+POST {{host}}/register
+Content-Type: application/json
+
+{
+    "name":"Mahdi",
+    "email":"mahadigmail.com",
+    "password":"pass123",
+    "is_email_verified":false
+}
+
+###
+GET {{host}}/login
+Content-Type: application/json
+
+{
+    "email":"shafi@gmail.com",
+    "password":"pass123"
+}
