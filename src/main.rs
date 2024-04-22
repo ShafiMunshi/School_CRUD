@@ -47,9 +47,12 @@ async fn main() -> surrealdb::Result<()> {
         .await
         .expect("Unable to connect with 127.0.0.1:3000");
 
+    println!("Application started");    
     axum::serve::serve(listener, app.into_make_service())
         .await
         .expect("App servicing failed");
+
+
 
 
 

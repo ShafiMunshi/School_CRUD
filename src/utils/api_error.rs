@@ -50,6 +50,8 @@ impl From<Error> for ApiError {
     fn from(err: Error) -> Self {
         let status= match err {
             Error::WrongCredentials=>StatusCode::UNAUTHORIZED,
+            Error::DuplicateUserEmail=>StatusCode::CONFLICT,
+            Error::DuplicateUserName=>StatusCode::CONFLICT,
             _=>StatusCode::INTERNAL_SERVER_ERROR
         };
 
