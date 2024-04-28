@@ -6,7 +6,8 @@ use rand::Rng;
 
 /*
 step 1:  turn on 2 factor authorization of your gmail
-step 2: go to this link , and generate app password     ---- 
+step 2: go to this link , and generate app password     ---- https://myaccount.google.com/apppasswords?rapt=AEjHL4MKMoxNci-OoCa7aiPPhp_943zVvKWaPxjtVkheVjR2SqAT2f_mcAdaffIOVrHIwTJBE9gWxJF-ItDaZewJHssqfRUEpjpHxjvYkgex3TOc8Bv-xQc
+step 3: copy app passwords
 */ 
 
 
@@ -23,15 +24,15 @@ pub fn email_sent(user_email:String,verify_code: String) {
 
     // compose a email
     let email = Message::builder()
-        .from("shafimunshi111@gmail.com".parse().unwrap())
+        .from("".parse().unwrap())// TODO: write here your email address
         .to(user_email.parse().unwrap())
         .subject("Please, Verify Your Account")
         .body(email_body)
         .unwrap();
 
     let creds = Credentials::new(
-        String::from("shafimunshi111@gmail.com"),
-        String::from("wqxq jkjr vdab sfqh"),// your app password
+        String::from(""),//TODO: write here your email address
+        String::from(""),//TODO: paste your app password
     );
 
     let mailer = SmtpTransport::relay("smtp.gmail.com")
