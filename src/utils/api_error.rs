@@ -8,6 +8,8 @@ use serde_json::{json, Value};
 use thiserror::Error;
 
 
+
+
 // here we made Enum type error -> using thiserror trait..
 // https://crates.io/crates/thiserror
 
@@ -18,7 +20,7 @@ use thiserror::Error;
 pub enum Error {
     #[error("something went wrong to get")]
     DbGetError(surrealdb::Error),
-    #[error("something went wrong to post")]
+    #[error("something went wrong to post ")]
     DbPostError(surrealdb::Error),
     #[error("something went wrong to update")]
     DbUpdateError,
@@ -34,6 +36,13 @@ pub enum Error {
     DuplicateUserName,
     #[error("email is not valid")]
     EmailValidationError,
+    #[error("Your email is not verified yet, Please verify")]
+    EmailVerificationError,
+    #[error("Limit Crossed. Please try again after 5 minutes")]
+    OtpSentMultipleTimeError,
+    #[error("Too many requests. Please try again after 10 seconds")]
+    OtpContinuoslyResendingError,
+  
 }
 
 pub type Result<T> = std::result::Result<T, Error>;
@@ -52,6 +61,8 @@ impl From<Error> for ApiError {
             Error::WrongCredentials=>StatusCode::UNAUTHORIZED,
             Error::DuplicateUserEmail=>StatusCode::CONFLICT,
             Error::DuplicateUserName=>StatusCode::CONFLICT,
+            Error::OtpSentMultipleTimeError=>StatusCode::TOO_MANY_REQUESTS,
+            Error::OtpContinuoslyResendingError=>StatusCode::TOO_MANY_REQUESTS,
             _=>StatusCode::INTERNAL_SERVER_ERROR
         };
 

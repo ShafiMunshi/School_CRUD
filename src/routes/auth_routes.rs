@@ -1,13 +1,13 @@
 use axum::{
     http::Method,
-    routing::{get, post},
+    routing:: post,
     Router,
 };
 
 use tower_http::cors::{Any, CorsLayer};
 
 use crate::handlers::
-    auth_handlers::{sign_in, sign_up};
+    auth_handlers::{otp_verification, resend_otp_code, sign_in, sign_up};
 
 pub fn auth_route() -> Router {
     let cors = CorsLayer::new()
@@ -16,7 +16,12 @@ pub fn auth_route() -> Router {
 
     let router = Router::new()
         .route("/register", post(sign_up))
-        .route("/login", get(sign_in))
+        .route("/login", post(sign_in))
+        .route("/verify_otp", post(otp_verification))
+        .route("/resend_otp", post(resend_otp_code))
+        // .route("/change_password", post(resend_otp_code))
+        // .route("/", post(resend_otp_code))
+        
         .layer(cors);
 
     router

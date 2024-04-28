@@ -25,7 +25,14 @@ jsonwebtoken = "9.3.0"
 bcrypt = "0.15.1"
 rayon = "1.10.0"
 
-# anyhow = "1.0.81"
+# For error handling
 thiserror = "1.0.59"
 
 validator = { version = "0.16", features = ["derive"] }
+
+# sending email to user email
+openssl = { version = "0.10", features = ["vendored"] }
+lettre = "0.11.6"
+lettre_email = "0.9.4"
+
+rand = "0.8.4"

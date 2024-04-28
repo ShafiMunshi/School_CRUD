@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 use surrealdb::sql::Thing;
-use tracing_subscriber::field::debug;
+
 
 use super::student_model::SemesterResult;
 

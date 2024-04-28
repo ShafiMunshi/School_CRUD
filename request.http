@@ -27,17 +27,38 @@ POST {{host}}/register
 Content-Type: application/json
 
 {
-    "name":"Munshi",
-    "email":"munshi@gmail.com",
+    "name":"Akash",
+    "email":"dakash682@gmail.com",
     "password":"pass123",
     "is_email_verified":false
 }
 
 ###
-GET {{host}}/login
+POST {{host}}/login
 Content-Type: application/json
 
 {
-    "email":"munshi@gmail.com",
+    "email":"dakash682@gmail.com",
     "password":"pass123"
 }
+
+
+
+###
+POST {{host}}/verify_otp
+Content-Type: application/json
+
+{
+    "id":"cukl07w6257zzci493dg",
+    "otp":"777595"
+}
+
+
+###
+POST {{host}}/resend_otp
+Content-Type: application/json
+
+{
+    "id":"cukl07w6257zzci493dg"
+}
+// make sure the id token is correct

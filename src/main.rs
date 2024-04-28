@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 #![allow(unused_variables)]
+#![allow(unused_parens)]
 
 
 use std::sync::Arc;
@@ -16,6 +17,7 @@ mod models;
 mod routes;
 mod utils;
 mod handlers;
+mod services;
 
 #[tokio::main]
 async fn main() -> surrealdb::Result<()> {
