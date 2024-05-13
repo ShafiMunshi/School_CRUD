@@ -6,7 +6,7 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 use crate::{
     models::{
         record_model::Record,
-        student_model::{SemesterResult, Student},
+        student_model::{SemesterResult, Student, Token},
     },
     utils::api_error::ApiResult,
 };
@@ -19,10 +19,8 @@ pub async fn get_all_students(db_instance: DB) -> ApiResult<String> {
     let all_student: Vec<Record> = db_instance
         .select("school")
         .await
-        .map_err(|err| Error::DbGetError(err))?;// if something error happend on surrealDb get request, map_err() will capture the error and return it as out custom defined error
+        .map_err(|err| Error::DbGetError(err))?; // if something error happend on surrealDb get request, map_err() will capture the error and return it as out custom defined error
     Ok(format!(" {:#?}", all_student))
-
-
 }
 
 pub async fn create_student(
@@ -38,3 +36,6 @@ pub async fn create_student(
     Ok(format!("Adeedd: {:#?}", create_student))
 }
 
+// pub async fn get_user_data(db_instance: DB, Json(token): Json<Token>) -> ApiResult<String> {
+
+// }

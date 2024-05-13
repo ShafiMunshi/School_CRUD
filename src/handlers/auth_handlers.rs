@@ -8,12 +8,12 @@ use validator::Validate;
 use crate::{
     models::auth_model::{
         EmailVerificationSuccess, LoginInput, OTPFromUser, OTPRecord, OtpDetails, RegisterInput,
-        UserRecord, ID, OTP,
+        RegisterdDataDb, TokenPayload, UnifiedResponse, UserEmail, UserRecord, OTP,
     },
     services::verification_code::{email_sent, generate_otp},
     utils::{
         api_error::{ApiResult, Error},
-        encryption,
+        encryption, jwt,
     },
 };
 
@@ -44,7 +44,7 @@ pub async fn sign_up(
     //  bcrypt the password , and set it database,
     let register: Vec<UserRecord> = db_instence
         .create("user")
-        .content(RegisterInput {
+        .content(RegisterdDataDb {
             password: encryption::hash_password(register_input.password.to_string()).await, // encrypted the password
             name: register_input.name,
             is_email_verified: false,
@@ -53,24 +53,23 @@ pub async fn sign_up(
         .await
         .map_err(|err| Error::DbPostError(err))?; // if something error happend on surrealDb post request, map_err() will capture the error and return it as out custom defined error
 
-    let user_id = register[0].id.id.clone().to_string();
+    let user_email = register[0].email.clone().to_string();
 
     // generate a otp and send the otp as verification code to registered user email
     let otp = generate_otp();
 
     // save the current otp on database, so that we could verify the otp in /otp_verify (route)
-    println!(" REgistered id is: {}", user_id);
 
     // save the generated otp in the database
     let save_otp: Option<OTP> = db_instence
-        .create(("otp", user_id.clone()))
+        .create(("otp", user_email.clone()))
         .content(OTP { otp: otp.clone() })
         .await
         .map_err(|err| Error::DbPostError(err))?;
 
     // save some extra creadential for checking further,( otp sending limit verification)
     let save_otp_details: Option<OtpDetails> = db_instence
-        .update(("otp", user_id.clone()))
+        .update(("otp", user_email.clone()))
         .merge(OtpDetails {
             sent_count: 1,                              // initially setted the 1 time sent
             last_sent_time: Local::now().naive_local(), // storing the time when the otp has been sent
@@ -81,7 +80,17 @@ pub async fn sign_up(
     // sent the otp to the registerd userEmail
     email_sent(register_input.email, otp);
 
-    Ok(format!("Registerd User: {:?}", register))
+    // Ok(format!("{:#?}",UnifiedResponse{
+    //     status:"Success".to_string(),
+    //     message:"Please verify your otp".to_string()
+    // }));
+
+    // serialize all data intoj json to return as response
+    return Ok(serde_json::to_string(&UnifiedResponse {
+        status: "Success".to_string(),
+        message: "Please verify your otp".to_string(),
+    })
+    .expect("unable to serialize"));
 }
 
 pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> ApiResult<String> {
@@ -105,7 +114,7 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
 
     // after getting the hashed password - verify it.
     let user_record: Option<UserRecord> = db_instence // get a single user record for password verification,
-        .select(("user", user_id))
+        .select(("user", user_id.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
 
@@ -120,7 +129,6 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
     let is_verified = encryption::veriy_password(login_input.password, hash_pass).await; // verifing the password if it's matches with logini inputted password
 
     if is_verified {
-      
         // Case: what if a user registered his record but did't verify his email. in that case, we have verify his email again, then we will give him access to log in
         match user_record {
             Some(user_rec) => {
@@ -133,12 +141,34 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
             None => (),
         }
 
-        return Ok(format!("Authentication Successfull")); // authentication successfull
+        // sign a new jwt token then pass to user every time he wants to login
+        // if verfication is comlete then generate a jwt token to the the user:
+        let token = jwt::sign(user_id);
+
+        // sent the jwt token as response
+        println!(" JWT Token: {:?}", token);
+        match token {
+            // Ok(jwt_token) => {
+            //     return Ok(format!(
+            //         "{:#?}",
+            //         TokenPayload {
+            //             access_token: jwt_token,
+            //             token_type: "Bearer".to_string()
+            //         }
+            //     ))
+            // }
+            // Err(_) => return Err(Error::SomethingWentWrog.into()),
+            Ok(jwt_token) => Ok(serde_json::to_string(&TokenPayload {
+                access_token: jwt_token,
+                token_type: "Bearer".to_string(),
+            })
+            .expect("unable to serialize")),
+            Err(_) => return Err(Error::SomethingWentWrog.into()),
+        }
     } else {
         return Err(Error::WrongCredentials.into()); // password is not verified.
     }
 }
-
 
 // this function will return Option<UserRecord>
 pub async fn email_exists(db_instence: DB, email: String) -> Option<UserRecord> {
@@ -160,7 +190,7 @@ pub async fn otp_verification(
     Json(otp_code_from_user): Json<OTPFromUser>,
 ) -> ApiResult<String> {
     let otp_from_db: Option<OTPRecord> = db_instence
-        .select(("otp", otp_code_from_user.id.clone()))
+        .select(("otp", otp_code_from_user.email.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
 
@@ -178,31 +208,67 @@ pub async fn otp_verification(
 
     if is_verified {
         // if otp is verified, then we should change user (is_email_verified = true)
+        // first get the user id from userRecord using his email
+        let user_record = email_exists(db_instence.clone(), otp_code_from_user.email.clone())
+            .await
+            .expect("error found to get user_record");
+
+        // set to user record (is_email_verified = true)
+
+        let user_id = user_record.id.id.to_string();
+        println!(" User id is: {}",user_id);
         let register: Option<UserRecord> = db_instence
-            .update(("user", otp_code_from_user.id))
+            .update(("user", user_id.clone()))
             .merge(EmailVerificationSuccess {
                 is_email_verified: true,
             })
             .await
             .map_err(|err| Error::DbPostError(err))?;
 
-        // for more secuirity: we will delete the otp after verificaion of a user
+        // for more secuirity: we will delete the otp after verificaion of a user so that hacker could not gain that otp of targetted user
+        
+        // let delete_usero_otp: Option<()> = db_instence
+        //     .delete(("otp", otp_code_from_user.email))
+        //     .await
+        //     .map_err(|err| Error::DbPostError(err))?;
 
-        Ok(format!("User verified successfully"))
+        // if verfication is comlete then generate a jwt token to the the user:
+        let token = jwt::sign(user_id.clone());
+
+        // sent the jwt token as response
+        println!(" JWT Token: {:?}", token);
+        match token {
+            // Ok(jwt_token) => Ok(format!(
+            //     "User verified successfully {:#?}",
+            //     TokenPayload {
+            //         access_token: jwt_token,
+            //         token_type: "Bearer".to_string()
+            //     }
+            // )),
+            // Err(_) => return Err(Error::SomethingWentWrog.into()),
+            Ok(jwt_token) => Ok(serde_json::to_string(&TokenPayload {
+                access_token: jwt_token,
+                token_type: "Bearer".to_string(),
+            })
+            .expect("unable to serialize")),
+            Err(_) => return Err(Error::SomethingWentWrog.into()),
+        }
     } else {
-        Ok(format!("Could not verify the user"))
+        Err(Error::SomethingWentWrog.into())
     }
 }
 
-
-pub async fn resend_otp_code(db_instence: DB, Json(user_id): Json<ID>) -> ApiResult<String> {
-    let user_id = user_id.id.clone();
+pub async fn resend_otp_code(
+    db_instence: DB,
+    Json(user_email): Json<UserEmail>,
+) -> ApiResult<String> {
+    let user_email = user_email.email.clone();
     //check if the user already request 3 time for sending otp
     // if he sent less than 3 we will sent a otp code for him, otherwise we will show the time when he can send request again for otp,
 
     // get the last otp record( counter, last sent time)
     let otp_details_from_db: Option<OtpDetails> = db_instence
-        .select(("otp", user_id.clone()))
+        .select(("otp", user_email.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
 
@@ -218,7 +284,7 @@ pub async fn resend_otp_code(db_instence: DB, Json(user_id): Json<ID>) -> ApiRes
 
             println!("time differrence:  {}", time_diff);
 
-            //if a user tap again in resend otp button - this message will show appeared
+            //if a user tap again in resend otp button between 30 seconds- this message will show appeared
             if (time_diff <= 30) {
                 return Err(Error::OtpContinuoslyResendingError)?;
             }
@@ -227,7 +293,23 @@ pub async fn resend_otp_code(db_instence: DB, Json(user_id): Json<ID>) -> ApiRes
 
             // check if counter if less than 3
             if (otp_detls.sent_count >= 3) {
-                return Err(Error::OtpSentMultipleTimeError)?;
+                // check if the limit crossing punishment is over, we have to set the sent_count =0, so that user could request for otp again
+                // we punished the user for not to request an otp for 5 miniutes,
+                // check if the 5 miniutes are over (5*60= 300 seconds)
+                if (time_diff <= 300) {
+                    // if 300 seconds is not over
+                    return Err(Error::OtpSentMultipleTimeError)?;
+                } else {
+                    // if 300 seconds is over
+                    let save_otp_details: Option<OtpDetails> = db_instence
+                        .update(("otp", user_email.clone()))
+                        .merge(OtpDetails {
+                            sent_count: 0, // set to 0
+                            last_sent_time: Local::now().naive_local(),
+                        })
+                        .await
+                        .map_err(|err| Error::DbPostError(err))?;
+                }
             }
 
             // generate e new otp code for user
@@ -235,29 +317,17 @@ pub async fn resend_otp_code(db_instence: DB, Json(user_id): Json<ID>) -> ApiRes
 
             // save the otp into otp table according to user id
             let save_otp_to_db: Option<OTP> = db_instence
-                .update(("otp", user_id.clone()))
+                .update(("otp", user_email.clone()))
                 .merge(OTP { otp: otp.clone() })
                 .await
                 .map_err(|err| Error::DbPostError(err))?;
 
-            // get the user email using his id
-            let user: Option<UserRecord> = db_instence // get a single user record for password verification,
-                .select(("user", user_id.clone()))
-                .await
-                .map_err(|err| Error::DbGetError(err))?;
-
-           
-
             // sent the otp to the registerd userEmail
-            match user.as_ref() {
-                Some(user_data) => email_sent(user.unwrap().email, otp), //TODO: using unwrap() in Option is not good practise, Furuther modify
-                None => println!("No email found to sent, check you id again "),
-            }
-
+            email_sent(user_email.clone(), otp);
 
             // update the (sent_count & last_sent_time) value
             let save_otp_details: Option<OtpDetails> = db_instence
-                .update(("otp", &user_id))
+                .update(("otp", user_email.clone()))
                 .merge(OtpDetails {
                     sent_count: otp_detls.sent_count + 1, // increment the message sent counter
                     last_sent_time: Local::now().naive_local(), // storing the time when the otp has been sent
@@ -270,5 +340,11 @@ pub async fn resend_otp_code(db_instence: DB, Json(user_id): Json<ID>) -> ApiRes
         None => {}
     }
 
-    Ok(format!("New Verification code has been sent..."))
+    // Ok(format!("New Verification code has been sent..."))
+
+    return Ok(serde_json::to_string(&UnifiedResponse {
+        status: "Success".to_string(),
+        message: "New Verification code has been sent".to_string(),
+    })
+    .expect("unable to serialize"));
 }

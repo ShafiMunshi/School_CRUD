@@ -1,25 +1,5 @@
 @host = http://localhost:3000
 
-###
-GET {{host}}/students
-
-
-###
-POST {{host}}/students
-Content-Type: application/json
-
-{
-    "name": "Habib",
-    "roll": 45,
-    "is_male": true,
-    "results": 
-    {
-        "math": 56,
-        "english": 78,
-        "physics": 60,
-        "chemistry": 89
-    }
-}
 
 
 ###
@@ -27,10 +7,9 @@ POST {{host}}/register
 Content-Type: application/json
 
 {
-    "name":"Akash",
-    "email":"dakash682@gmail.com",
-    "password":"pass123",
-    "is_email_verified":false
+    "name":"Shafi",
+    "email":"shafimunshi66gmail.com",
+    "password":"pass123"
 }
 
 ###
@@ -38,7 +17,7 @@ POST {{host}}/login
 Content-Type: application/json
 
 {
-    "email":"dakash682@gmail.com",
+    "email":"shafimunshi66@gmail.com",
     "password":"pass123"
 }
 
@@ -49,8 +28,8 @@ POST {{host}}/verify_otp
 Content-Type: application/json
 
 {
-    "id":"cukl07w6257zzci493dg",
-    "otp":"777595"
+    "email":"shafimunshi66@gmail.com",
+    "otp":"568488"
 }
 
 
@@ -59,6 +38,16 @@ POST {{host}}/resend_otp
 Content-Type: application/json
 
 {
-    "id":"cukl07w6257zzci493dg"
+    "email":"shafimunshi66@gmail.com"
 }
 // make sure the id token is correct
+
+
+###
+GET {{host}}/students
+Content-Type: application/json
+
+{
+    "token":"sdfsdsdsdf"
+}
+

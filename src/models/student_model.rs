@@ -16,3 +16,11 @@ pub struct SemesterResult{
     pub physics:u8,
     pub chemistry:u8,
 }
+
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Token{
+    pub token : String
+}
+
+

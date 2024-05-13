@@ -13,6 +13,7 @@ lazy_static! {
     pub static ref NS: String = get_ns();
     pub static ref DB: String = get_db();
     pub static ref TOKEN: String = get_token();
+    pub static ref JWT_SECRET: String = get_secret_key();
 }
 
 fn get_database_url() ->String{
@@ -48,5 +49,10 @@ fn get_db() -> String {
 fn get_token() -> String {
     dotenv().ok();
    let var=  env::var("TOKEN").expect("Unable to find the token");
+   var
+}
+fn get_secret_key() -> String {
+    dotenv().ok();
+   let var=  env::var("JWT_SECRET").expect("Unable to find the secret key");
    var
 }
