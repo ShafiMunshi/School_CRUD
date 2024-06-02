@@ -1,8 +1,8 @@
-use surrealdb::{engine::remote::ws::{Client, Wss}, opt::auth::Root, Surreal};
+use surrealdb::{engine::remote::ws::{Client, Ws, Wss}, opt::auth::Root, Surreal};
 
 
 use crate::utils;
-pub async fn unified_db_instance() -> Surreal<Client> {
+pub async fn unified_db_instance()->Surreal<Client> {
 
     // getting all the important data from envirment 
     let db_url = utils::constants::DATABASE_URL.clone() ;
@@ -12,13 +12,13 @@ pub async fn unified_db_instance() -> Surreal<Client> {
     let db_bd = utils::constants::DB.clone();
 
 
-    let db = Surreal::new::<Wss>(db_url)
+    let db = Surreal::new::<Ws>(db_url)
         .await
         .expect("Error : Unable to connect with Client ");
 
     db.signin(Root {
         username: "root",
-        password: "test12345",
+        password: "preciq12345",
     })
     .await
     .expect("Error : Unable to Login");

@@ -1,4 +1,4 @@
-use axum::{Extension, Json};
+use axum::{extract::State, Extension, Json};
 use chrono::Local;
 
 use std::sync::Arc;
@@ -6,21 +6,28 @@ use surrealdb::{engine::remote::ws::Client, Surreal};
 use validator::Validate;
 
 use crate::{
-    models::auth_model::{
-        EmailVerificationSuccess, LoginInput, OTPFromUser, OTPRecord, OtpDetails, RegisterInput,
-        RegisterdDataDb, TokenPayload, UnifiedResponse, UserEmail, UserRecord, OTP,
+    models::{
+        auth_model::{
+            EmailVerificationSuccess, LoginInput, OTPFromUser, OTPRecord, OtpDetails,
+            RegisterInput, RegisterdDataDb, TokenPayload, UnifiedResponse, UserEmail, UserRecord,
+            OTP,
+        },
+        student_model::{GetUserEmail, Student},
     },
     services::verification_code::{email_sent, generate_otp},
     utils::{
         api_error::{ApiResult, Error},
+        app_state::AppState,
         encryption, jwt,
     },
 };
 
-type DB = Extension<Arc<Surreal<Client>>>;
+// type DB = Extension<Arc<Surreal<Client>>>;
+type DB = State<AppState>;
 
+/// This function called when a user register for a account
 pub async fn sign_up(
-    db_instence: DB,
+    State(db_instence): DB,
     Json(register_input): Json<RegisterInput>,
 ) -> ApiResult<String> {
     //check email is valid - we can use regex or validator crate
@@ -34,7 +41,7 @@ pub async fn sign_up(
     // if it's already in database, - return DuplicateEmailError
 
     let user: Option<UserRecord> =
-        email_exists(db_instence.clone(), register_input.email.clone()).await;
+        email_exists(State(db_instence.clone()), register_input.email.clone()).await; // TODO: can be bugged to connect database
 
     match user {
         Some(user_record) => return Err(Error::DuplicateUserEmail.into()), // return - "account is already exist"
@@ -43,15 +50,27 @@ pub async fn sign_up(
 
     //  bcrypt the password , and set it database,
     let register: Vec<UserRecord> = db_instence
+        .surreal_client
         .create("user")
         .content(RegisterdDataDb {
             password: encryption::hash_password(register_input.password.to_string()).await, // encrypted the password
-            name: register_input.name,
+            name: register_input.name.clone(),
             is_email_verified: false,
             email: register_input.email.clone(),
         })
         .await
         .map_err(|err| Error::DbPostError(err))?; // if something error happend on surrealDb post request, map_err() will capture the error and return it as out custom defined error
+
+    let store_some_data_on_student_record: Option<Student> = db_instence
+        .surreal_client
+        .create(("school",register[0].id.id.to_string().clone()))
+        .content(Student{
+            name: register_input.name,
+            is_male:true,
+            roll:99
+        })
+        .await
+        .map_err(|err| Error::DbPostError(err))?;
 
     let user_email = register[0].email.clone().to_string();
 
@@ -62,6 +81,7 @@ pub async fn sign_up(
 
     // save the generated otp in the database
     let save_otp: Option<OTP> = db_instence
+        .surreal_client
         .create(("otp", user_email.clone()))
         .content(OTP { otp: otp.clone() })
         .await
@@ -69,6 +89,7 @@ pub async fn sign_up(
 
     // save some extra creadential for checking further,( otp sending limit verification)
     let save_otp_details: Option<OtpDetails> = db_instence
+        .surreal_client
         .update(("otp", user_email.clone()))
         .merge(OtpDetails {
             sent_count: 1,                              // initially setted the 1 time sent
@@ -93,7 +114,11 @@ pub async fn sign_up(
     .expect("unable to serialize"));
 }
 
-pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> ApiResult<String> {
+/// This handler function is called when a user sign in
+pub async fn sign_in(
+    State(db_instence): DB,
+    Json(login_input): Json<LoginInput>,
+) -> ApiResult<String> {
     // check if the email is valid or not
     // then return EmailValidationErrror
     match login_input.validate() {
@@ -105,7 +130,7 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
     // if the the email is not exists, return UnAuthosized Error
 
     let user: Option<UserRecord> =
-        email_exists(db_instence.clone(), login_input.email.clone()).await;
+        email_exists(State(db_instence.clone()), login_input.email.clone()).await;
     let user_id;
     match user {
         Some(user_record) => user_id = user_record.id.id.to_string(),
@@ -113,7 +138,8 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
     };
 
     // after getting the hashed password - verify it.
-    let user_record: Option<UserRecord> = db_instence // get a single user record for password verification,
+    let user_record: Option<UserRecord> = db_instence
+        .surreal_client // get a single user record for password verification,
         .select(("user", user_id.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
@@ -171,9 +197,11 @@ pub async fn sign_in(db_instence: DB, Json(login_input): Json<LoginInput>) -> Ap
 }
 
 // this function will return Option<UserRecord>
-pub async fn email_exists(db_instence: DB, email: String) -> Option<UserRecord> {
+
+async fn email_exists(State(db_instence): DB, email: String) -> Option<UserRecord> {
     let sql_cmnd = format!("SELECT * FROM user WHERE email = '{}'", email);
     let mut repnse = db_instence
+        .surreal_client
         .query(sql_cmnd)
         .bind(("user", "email"))
         .await
@@ -185,11 +213,13 @@ pub async fn email_exists(db_instence: DB, email: String) -> Option<UserRecord> 
     user
 }
 
+/// this function is used for otp verification
 pub async fn otp_verification(
-    db_instence: DB,
+    State(db_instence): DB,
     Json(otp_code_from_user): Json<OTPFromUser>,
 ) -> ApiResult<String> {
     let otp_from_db: Option<OTPRecord> = db_instence
+        .surreal_client
         .select(("otp", otp_code_from_user.email.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
@@ -209,15 +239,17 @@ pub async fn otp_verification(
     if is_verified {
         // if otp is verified, then we should change user (is_email_verified = true)
         // first get the user id from userRecord using his email
-        let user_record = email_exists(db_instence.clone(), otp_code_from_user.email.clone())
-            .await
-            .expect("error found to get user_record");
+        let user_record =
+            email_exists(State(db_instence.clone()), otp_code_from_user.email.clone())
+                .await
+                .expect("error found to get user_record");
 
         // set to user record (is_email_verified = true)
 
         let user_id = user_record.id.id.to_string();
-        println!(" User id is: {}",user_id);
+        println!(" User id is: {}", user_id);
         let register: Option<UserRecord> = db_instence
+            .surreal_client
             .update(("user", user_id.clone()))
             .merge(EmailVerificationSuccess {
                 is_email_verified: true,
@@ -226,7 +258,7 @@ pub async fn otp_verification(
             .map_err(|err| Error::DbPostError(err))?;
 
         // for more secuirity: we will delete the otp after verificaion of a user so that hacker could not gain that otp of targetted user
-        
+
         // let delete_usero_otp: Option<()> = db_instence
         //     .delete(("otp", otp_code_from_user.email))
         //     .await
@@ -258,6 +290,7 @@ pub async fn otp_verification(
     }
 }
 
+/// when a user request to send for an otp, this function get called
 pub async fn resend_otp_code(
     db_instence: DB,
     Json(user_email): Json<UserEmail>,
@@ -268,6 +301,7 @@ pub async fn resend_otp_code(
 
     // get the last otp record( counter, last sent time)
     let otp_details_from_db: Option<OtpDetails> = db_instence
+        .surreal_client
         .select(("otp", user_email.clone()))
         .await
         .map_err(|err| Error::DbPostError(err))?;
@@ -302,6 +336,7 @@ pub async fn resend_otp_code(
                 } else {
                     // if 300 seconds is over
                     let save_otp_details: Option<OtpDetails> = db_instence
+                        .surreal_client
                         .update(("otp", user_email.clone()))
                         .merge(OtpDetails {
                             sent_count: 0, // set to 0
@@ -317,6 +352,7 @@ pub async fn resend_otp_code(
 
             // save the otp into otp table according to user id
             let save_otp_to_db: Option<OTP> = db_instence
+                .surreal_client
                 .update(("otp", user_email.clone()))
                 .merge(OTP { otp: otp.clone() })
                 .await
@@ -327,6 +363,7 @@ pub async fn resend_otp_code(
 
             // update the (sent_count & last_sent_time) value
             let save_otp_details: Option<OtpDetails> = db_instence
+                .surreal_client
                 .update(("otp", user_email.clone()))
                 .merge(OtpDetails {
                     sent_count: otp_detls.sent_count + 1, // increment the message sent counter
@@ -347,4 +384,9 @@ pub async fn resend_otp_code(
         message: "New Verification code has been sent".to_string(),
     })
     .expect("unable to serialize"));
+}
+
+/// get the token from request , then decode and verify it,
+pub async fn get_account() -> String {
+    "Hello".to_string()
 }

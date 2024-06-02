@@ -11,5 +11,5 @@ pub struct Record{
     pub roll:u8,
     pub is_male: bool,
     // pub hello: String,
-    pub results: SemesterResult,
+    // pub results: SemesterResult,
 }
